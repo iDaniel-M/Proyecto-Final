@@ -44,4 +44,4 @@ Aplicación de escritorio robusta y eficiente para la administración de inventa
 Este proyecto fue desarrollado con fines educativos y profesionales.
 
 ---
-Desarrollado por **[Daniel M]** - 2025
+Desarrollado por **Daniel Martinez y Alexander Mora** - 2025
