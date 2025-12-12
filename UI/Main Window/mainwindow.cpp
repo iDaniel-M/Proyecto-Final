@@ -2,7 +2,6 @@
 #include "ui_mainwindow.h"
 #include "componentdialog.h"
 
-// INCLUDES NECESARIOS
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSqlQueryModel>
@@ -12,48 +11,33 @@
 #include <QMessageBox>
 #include <QDebug>
 #include <QDate>
-#include <QFileDialog> // Para elegir dónde guardar
+#include <QFileDialog>
 
-// ==========================================
-//              1. CONSTRUCTOR
-// ==========================================
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-
-    // CORRECCIÓN DEL ERROR DE LA IMAGEN: QAbstractItemView
     ui->tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui->tableView->setSelectionMode(QAbstractItemView::SingleSelection);
     ui->tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
-    // Llenar el ComboBox de filtros
     ui->Filtrar->clear();
     ui->Filtrar->addItem("Todos");
     ui->Filtrar->addItems({"Electrónico", "Mecánico", "Herramienta", "Consumible"});
 
     refreshTable();
 }
-
 MainWindow::~MainWindow()
 {
     delete ui;
 }
-
-// ==========================================
-//           REFRESCAR TABLA
-// ==========================================
 void MainWindow::refreshTable()
 {
     ui->lineEditBuscar->clear();
     ui->Filtrar->setCurrentIndex(0);
     aplicarFiltros();
 }
-
-// ==========================================
-//      LÓGICA DE FILTRADO
-// ==========================================
 void MainWindow::aplicarFiltros()
 {
     QString textoBusqueda = ui->lineEditBuscar->text();
@@ -61,60 +45,53 @@ void MainWindow::aplicarFiltros()
 
     QSqlQueryModel *model = new QSqlQueryModel();
     QSqlQuery query;
-    QString sql = "SELECT id, name, type, quantity, location, acquisition_date FROM components WHERE 1=1";
 
+    QString sql = "SELECT id, name, type, quantity, location, acquisition_date FROM components WHERE 1=1";
     if (!textoBusqueda.isEmpty()) {
         sql += " AND name LIKE :search";
     }
-
     if (tipoSeleccionado != "Todos" && !tipoSeleccionado.isEmpty()) {
         sql += " AND type = :type";
     }
 
     query.prepare(sql);
-
     if (!textoBusqueda.isEmpty()) {
         query.bindValue(":search", "%" + textoBusqueda + "%");
     }
-    if (tipoSeleccionado != "Todos" && !tipoSeleccionado.isEmpty()) {
+    if (tipoSeleccionado != "Todos") {
         query.bindValue(":type", tipoSeleccionado);
     }
-
-    if(query.exec()) {
+    if (query.exec()) {
         model->setQuery(query);
         ui->tableView->setModel(model);
     }
 }
 
-void MainWindow::on_lineEditBuscar_textChanged(const QString &arg1)
+void MainWindow::on_lineEditBuscar_textChanged(const QString &)
 {
-    Q_UNUSED(arg1);
     aplicarFiltros();
 }
 
-void MainWindow::on_Filtrar_currentTextChanged(const QString &arg1)
+void MainWindow::on_Filtrar_currentTextChanged(const QString &)
 {
-    Q_UNUSED(arg1);
     aplicarFiltros();
 }
 
-// ==========================================
-//            BOTÓN AÑADIR
-// ==========================================
 void MainWindow::on_btnAnadir_clicked()
 {
     ComponentDialog dialog(this);
+
     if (dialog.exec() == QDialog::Accepted) {
         QSqlQuery query;
-        query.prepare("INSERT INTO components (name, type, quantity, location, acquisition_date) VALUES (:name, :type, :quantity, :location, :date)");
+        query.prepare("INSERT INTO components (name, type, quantity, location, acquisition_date) "
+                      "VALUES (:name, :type, :quantity, :location, :date)");
 
         query.bindValue(":name", dialog.getNombre());
         query.bindValue(":type", dialog.getTipo());
         query.bindValue(":quantity", dialog.getCantidad());
         query.bindValue(":location", dialog.getUbicacion());
         query.bindValue(":date", dialog.getFechaAdquisicion());
-
-        if(query.exec()) {
+        if (query.exec()) {
             QMessageBox::information(this, "Listo", "Componente añadido.");
             refreshTable();
         } else {
@@ -123,9 +100,6 @@ void MainWindow::on_btnAnadir_clicked()
     }
 }
 
-// ==========================================
-//            BOTÓN EDITAR
-// ==========================================
 void MainWindow::on_btnEditar_clicked()
 {
     QModelIndex index = ui->tableView->currentIndex();
@@ -136,7 +110,6 @@ void MainWindow::on_btnEditar_clicked()
 
     int row = index.row();
     QAbstractItemModel *m = ui->tableView->model();
-
     int id = m->index(row, 0).data().toInt();
     QString nombre = m->index(row, 1).data().toString();
     QString tipo = m->index(row, 2).data().toString();
@@ -148,16 +121,15 @@ void MainWindow::on_btnEditar_clicked()
 
     if (dialog.exec() == QDialog::Accepted) {
         QSqlQuery query;
-        query.prepare("UPDATE components SET name=:n, type=:t, quantity=:q, location=:l, acquisition_date=:d WHERE id=:id");
-
+        query.prepare("UPDATE components SET name=:n, type=:t, quantity=:q, location=:l, acquisition_date=:d "
+                      "WHERE id=:id");
         query.bindValue(":n", dialog.getNombre());
         query.bindValue(":t", dialog.getTipo());
         query.bindValue(":q", dialog.getCantidad());
         query.bindValue(":l", dialog.getUbicacion());
         query.bindValue(":d", dialog.getFechaAdquisicion());
         query.bindValue(":id", id);
-
-        if(query.exec()) {
+        if (query.exec()) {
             refreshTable();
             QMessageBox::information(this, "Listo", "Editado correctamente.");
         } else {
@@ -166,9 +138,6 @@ void MainWindow::on_btnEditar_clicked()
     }
 }
 
-// ==========================================
-//            BOTÓN ELIMINAR
-// ==========================================
 void MainWindow::on_btnEliminar_clicked()
 {
     QModelIndex index = ui->tableView->currentIndex();
@@ -176,15 +145,15 @@ void MainWindow::on_btnEliminar_clicked()
         QMessageBox::warning(this, "Aviso", "Selecciona una fila para eliminar.");
         return;
     }
-
-    if (QMessageBox::question(this, "Confirmar", "¿Borrar este elemento?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes) {
+    if (QMessageBox::question(this, "Confirmar", "¿Borrar este elemento?",
+                              QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes)
+    {
         int id = ui->tableView->model()->index(index.row(), 0).data().toInt();
-
         QSqlQuery query;
         query.prepare("DELETE FROM components WHERE id = :id");
         query.bindValue(":id", id);
 
-        if(query.exec()) {
+        if (query.exec()) {
             refreshTable();
         } else {
             QMessageBox::critical(this, "Error", query.lastError().text());
@@ -192,21 +161,12 @@ void MainWindow::on_btnEliminar_clicked()
     }
 }
 
-// ==========================================
-//      BOTÓN REPORTE (CON SELECTOR DE ARCHIVO)
-// ==========================================
 void MainWindow::on_btnReporte_clicked()
 {
-    // CORRECCIÓN: Nombre de función coincide con btnReporte del .ui
+    QString fileName = QFileDialog::getSaveFileName(
+        this, "Guardar Reporte", QDir::homePath() + "/reporte.pdf", "Archivos PDF (*.pdf)");
 
-    QString fileName = QFileDialog::getSaveFileName(this,
-                                                    "Guardar Reporte",
-                                                    QDir::homePath() + "/reporte.pdf",
-                                                    "Archivos PDF (*.pdf)");
-
-    if (fileName.isEmpty()) {
-        return; // Usuario canceló
-    }
+    if (fileName.isEmpty()) return;
 
     QPrinter printer(QPrinter::HighResolution);
     printer.setPageSize(QPageSize(QPageSize::A4));
@@ -218,10 +178,8 @@ void MainWindow::on_btnReporte_clicked()
         QMessageBox::warning(this, "Error", "No se pudo iniciar el PDF.");
         return;
     }
-
     painter.setFont(QFont("Arial", 18, QFont::Bold));
     painter.drawText(50, 100, "REPORTE DE INVENTARIO");
-
     painter.setFont(QFont("Arial", 10));
     painter.drawText(50, 130, "Fecha: " + QDate::currentDate().toString("dd/MM/yyyy"));
 
@@ -229,13 +187,12 @@ void MainWindow::on_btnReporte_clicked()
 
     QSqlQuery query("SELECT name, quantity, type, location FROM components");
 
-    while(query.next()) {
+    while (query.next()) {
         QString texto = QString("- %1: %2 un. (%3) en %4")
                         .arg(query.value(0).toString())
                         .arg(query.value(1).toString())
                         .arg(query.value(2).toString())
                         .arg(query.value(3).toString());
-
         painter.drawText(50, y, texto);
         y += 25;
 
