@@ -16,4 +16,3 @@ HEADERS += \
 FORMS += \
     componentdialog.ui \
     mainwindow.ui \
-    componentdialog.ui # ¡NUEVO!
