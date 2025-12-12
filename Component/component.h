@@ -1,31 +1,28 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
 
-#include <QString>
-#include <QDate>
+#include <QString> // Necesario para QString
 
-class Component
-{
+class Component {
 public:
-    // Constructores
+    // 1. Declaración del Constructor vacío (SOLO declaración, termina en ;)
     Component();
-    // Constructor principal usado para crear nuevos objetos a insertar
-    Component(const QString &name, const QString &type, int quantity, const QString &location, const QDate &purchaseDate);
 
-    // Getters
-    QString name() const { return m_name; }
-    QString type() const { return m_type; }
-    int quantity() const { return m_quantity; }
-    QString location() const { return m_location; }
-    QDate purchaseDate() const { return m_purchaseDate; }
+    // 2. Declaración del Constructor con parámetros (debe coincidir exactamente)
+    Component(int id, const QString &name, int quantity, double price);
+
+    // 3. Declaración de los Getters
+    int getId() const;
+    QString getName() const;
+    int getQuantity() const;
+    double getPrice() const;
 
 private:
-    // Nota: El ID no se maneja aquí, lo autogenera SQLite (es una buena práctica)
+    // 4. Declaración de las variables miembro (esto es lo que te falta)
+    int m_id;
     QString m_name;
-    QString m_type;
     int m_quantity;
-    QString m_location;
-    QDate m_purchaseDate;
+    double m_price;
 };
 
 #endif // COMPONENT_H
