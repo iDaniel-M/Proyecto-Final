@@ -1,104 +1,58 @@
 #include "databasemanager.h"
-#include <QSqlRecord>
-#include <QList>
-#include <QVariant>
 
-// Implementación del constructor
-DatabaseManager::DatabaseManager(const QString &databaseName)
-    : DB_NAME(databaseName)
+// Implementación del Singleton
+DatabaseManager& DatabaseManager::instance()
 {
+    static DatabaseManager _instance;
+    return _instance;
 }
 
-bool DatabaseManager::openDatabase()
+// Constructor
+DatabaseManager::DatabaseManager()
 {
-    if (QSqlDatabase::contains("inventario_connection")) {
-        m_db = QSqlDatabase::database("inventario_connection");
-    } else {
-        m_db = QSqlDatabase::addDatabase("QSQLITE", "inventario_connection");
-        m_db.setDatabaseName(DB_NAME);
-    }
+    m_db = QSqlDatabase::addDatabase("QSQLITE");
+    m_db.setDatabaseName("inventario.sqlite");
 
     if (!m_db.open()) {
-        qDebug() << "ERROR: No se pudo abrir la base de datos:" << m_db.lastError().text();
-        return false;
+        qDebug() << "Error fatal al inicio:" << m_db.lastError().text();
     }
-    qDebug() << "Conexión a SQLite establecida con éxito:" << DB_NAME;
-    return true;
+}
+
+bool DatabaseManager::openConnection()
+{
+    if (m_db.isOpen()) return true;
+    return m_db.open();
 }
 
 bool DatabaseManager::createTable()
 {
-    QSqlQuery query(m_db);
-    QString sql = "CREATE TABLE IF NOT EXISTS components ("
-                  "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                  "name TEXT NOT NULL,"
-                  "type TEXT,"
-                  "quantity INTEGER NOT NULL,"
-                  "location TEXT,"
-                  "purchase_date DATE"
-                  ");";
+    if (!openConnection()) return false;
 
-    if (!query.exec(sql)) {
-        qDebug() << "ERROR al crear la tabla components:" << query.lastError().text();
-        return false;
-    }
-    qDebug() << "Tabla 'components' verificada/creada.";
-    return true;
+    QSqlQuery query;
+    QString sql = "CREATE TABLE IF NOT EXISTS items ("
+                  "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                  "nombre TEXT, "
+                  "cantidad INTEGER, "
+                  "precio REAL)";
+    return query.exec(sql);
 }
 
-bool DatabaseManager::addComponent(const Component &component)
+// Implementación de getAllComponents
+QList<Component> DatabaseManager::getAllComponents()
 {
-    QSqlQuery query(m_db);
-    QString sql = "INSERT INTO components (name, type, quantity, location, purchase_date) "
-                  "VALUES (:name, :type, :quantity, :location, :purchase_date)";
+    QList<Component> lista;
+    if (!openConnection()) return lista;
 
-    query.prepare(sql);
-    query.bindValue(":name", component.name());
-    query.bindValue(":type", component.type());
-    query.bindValue(":quantity", component.quantity());
-    query.bindValue(":location", component.location());
-    query.bindValue(":purchase_date", component.purchaseDate().toString(Qt::ISODate));
+    QSqlQuery query("SELECT id, nombre, cantidad, precio FROM items");
 
-    if (!query.exec()) {
-        qDebug() << "ERROR al añadir componente:" << query.lastError().text();
-        return false;
+    while (query.next()) {
+        int id = query.value(0).toInt();
+        QString nombre = query.value(1).toString();
+        int cantidad = query.value(2).toInt();
+        double precio = query.value(3).toDouble();
+
+        // Creamos el componente y lo añadimos
+        lista.append(Component(id, nombre, cantidad, precio));
     }
-    qDebug() << "Componente añadido con éxito:" << component.name();
-    return true;
-}
-
-QList<Component> DatabaseManager::allComponents() const
-{
-    QList<Component> components;
-    // La implementación no es crítica, ya que la interfaz usa QSqlTableModel
-    return components;
-}
-
-// IMPLEMENTACIÓN DE REPORTE (Lectura completa de todos los campos)
-QVector<QStringList> DatabaseManager::getAllComponentsForReport() const
-{
-    QVector<QStringList> componentsData;
-    QSqlQuery query(m_db);
-
-    // Selecciona todos los campos de la base de datos
-    if (query.exec("SELECT id, name, type, quantity, location, purchase_date FROM components ORDER BY name ASC"))
-    {
-        while (query.next())
-        {
-            QStringList row;
-            // Mapea cada valor de la base de datos a un string en la lista para el reporte
-            row << query.value("id").toString();
-            row << query.value("name").toString();
-            row << query.value("type").toString();
-            row << query.value("quantity").toString();
-            row << query.value("location").toString();
-            row << query.value("purchase_date").toString();
-
-            componentsData.append(row);
-        }
-    } else {
-        qDebug() << "ERROR Reporte: No se pudo leer la base de datos:" << query.lastError().text();
-    }
-
-    return componentsData;
+    return lista;
 }
