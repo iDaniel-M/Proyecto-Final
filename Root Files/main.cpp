@@ -11,22 +11,19 @@ int main(int argc, char *argv[])
 
     DatabaseManager dbManager("inventario.sqlite");
 
-    // 1. Verificar la conexión y la tabla
     if (!dbManager.openDatabase() || !dbManager.createTable()) {
-        QMessageBox::critical(nullptr, "Error Crítico", "Fallo al iniciar la Base de Datos. La aplicación terminará.");
+        QMessageBox::critical(nullptr, "Error Crítico", "Fallo al iniciar la Base de Datos.");
         return 1;
     }
 
-    // 2. PRUEBA DE INSERCIÓN (CREACIÓN DE REGISTRO)
     Component testComponent("Resistencia 10K Ohm", "Pasivo", 200, "Caja R1", QDate::currentDate());
 
     if (dbManager.addComponent(testComponent)) {
-        qDebug() << "Test: Artículo de prueba insertado correctamente.";
+        qDebug() << "Artículo de prueba insertado.";
     } else {
-        qDebug() << "Test: Fallo en la inserción de prueba.";
+        qDebug() << "Fallo en la inserción de prueba.";
     }
 
-    // 3. Iniciar la Interfaz si todo es exitoso
     MainWindow w;
     w.show();
 
