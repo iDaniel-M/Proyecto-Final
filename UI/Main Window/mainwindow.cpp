@@ -1,240 +1,250 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "componentdialog.h"
-#include "databasemanager.h"
+
+// INCLUDES NECESARIOS
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QSqlQueryModel>
+#include <QPrinter>
+#include <QPainter>
+#include <QDir>
 #include <QMessageBox>
 #include <QDebug>
-#include <QHeaderView>
-#include <QFileDialog>
-#include <QTextStream>
-#include <QPdfWriter>
-#include <QPainter>
-#include <QStandardPaths>
-#include <QDir>
-#include <QPageSize>
+#include <QDate>
+#include <QFileDialog> // Para elegir dónde guardar
 
+// ==========================================
+//              1. CONSTRUCTOR
+// ==========================================
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow)
+    : QMainWindow(parent)
+    , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    setupModel();
 
-    // 1. Configuración del Proxy (Búsqueda y Filtro)
-    proxyModel = new QSortFilterProxyModel(this);
-    proxyModel->setSourceModel(componentModel);
-    proxyModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
-    proxyModel->setFilterKeyColumn(-1);
-    ui->tableView->setModel(proxyModel);
-
-    // 2. Configuración Visual
+    // CORRECCIÓN DEL ERROR DE LA IMAGEN: QAbstractItemView
     ui->tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui->tableView->setSelectionMode(QAbstractItemView::SingleSelection);
-    ui->tableView->setSortingEnabled(true);
-    ui->tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    ui->tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
-    // 3. Configuración del Filtro (USANDO NOMBRE 'Filtrar')
+    // Llenar el ComboBox de filtros
     ui->Filtrar->clear();
-    // El índice 0 será "Filtrar...", que servirá para mostrar todo
-    ui->Filtrar->addItems({"Filtrar...", "Electrónico", "Mecánico", "Herramienta", "Consumible"});
+    ui->Filtrar->addItem("Todos");
+    ui->Filtrar->addItems({"Electrónico", "Mecánico", "Herramienta", "Consumible"});
 
-    // *** CONEXIÓN MANUAL USANDO 'Filtrar' ***
-    // Asegúrate de que en tu .h el slot se llame 'on_Filtrar_currentIndexChanged'
-    connect(ui->Filtrar, SIGNAL(currentIndexChanged(int)),
-            this, SLOT(on_Filtrar_currentIndexChanged(int)));
-
-    // 4. Conexión de doble click
-    connect(ui->tableView, &QTableView::doubleClicked, this, &MainWindow::on_tableView_doubleClicked);
+    refreshTable();
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
-    delete componentModel;
-    delete proxyModel;
 }
 
-void MainWindow::setupModel()
+// ==========================================
+//           REFRESCAR TABLA
+// ==========================================
+void MainWindow::refreshTable()
 {
-    QSqlDatabase db = QSqlDatabase::database("inventario_connection");
-    componentModel = new QSqlTableModel(this, db);
-    componentModel->setTable("components");
-    componentModel->setEditStrategy(QSqlTableModel::OnManualSubmit);
-
-    componentModel->setHeaderData(1, Qt::Horizontal, tr("Nombre"));
-    componentModel->setHeaderData(2, Qt::Horizontal, tr("Tipo"));
-    componentModel->setHeaderData(3, Qt::Horizontal, tr("Cantidad"));
-    componentModel->setHeaderData(4, Qt::Horizontal, tr("Ubicación"));
-    componentModel->setHeaderData(5, Qt::Horizontal, tr("Fecha Compra"));
-
-    componentModel->select();
-    ui->tableView->hideColumn(0);
+    ui->lineEditBuscar->clear();
+    ui->Filtrar->setCurrentIndex(0);
+    aplicarFiltros();
 }
 
-// ---------------------- LÓGICA DEL FILTRO (USANDO 'Filtrar') ----------------------
-void MainWindow::on_Filtrar_currentIndexChanged(int index)
+// ==========================================
+//      LÓGICA DE FILTRADO
+// ==========================================
+void MainWindow::aplicarFiltros()
 {
-    QString tipoFiltro = "";
-    proxyModel->setFilterKeyColumn(2); // Columna 2 es 'Tipo'
+    QString textoBusqueda = ui->lineEditBuscar->text();
+    QString tipoSeleccionado = ui->Filtrar->currentText();
 
-    switch(index) {
-        case 1: tipoFiltro = "Electrónico"; break;
-        case 2: tipoFiltro = "Mecánico"; break;
-        case 3: tipoFiltro = "Herramienta"; break;
-        case 4: tipoFiltro = "Consumible"; break;
-        default: tipoFiltro = ""; // Caso 0: "Filtrar..." -> Muestra todo
+    QSqlQueryModel *model = new QSqlQueryModel();
+    QSqlQuery query;
+    QString sql = "SELECT id, name, type, quantity, location, acquisition_date FROM components WHERE 1=1";
+
+    if (!textoBusqueda.isEmpty()) {
+        sql += " AND name LIKE :search";
     }
 
-    if (tipoFiltro.isEmpty()) {
-        proxyModel->setFilterKeyColumn(-1); // Buscar en todas las columnas
-        proxyModel->setFilterFixedString(""); // Quitar filtro
-    } else {
-        proxyModel->setFilterFixedString(tipoFiltro); // Aplicar filtro
+    if (tipoSeleccionado != "Todos" && !tipoSeleccionado.isEmpty()) {
+        sql += " AND type = :type";
+    }
+
+    query.prepare(sql);
+
+    if (!textoBusqueda.isEmpty()) {
+        query.bindValue(":search", "%" + textoBusqueda + "%");
+    }
+    if (tipoSeleccionado != "Todos" && !tipoSeleccionado.isEmpty()) {
+        query.bindValue(":type", tipoSeleccionado);
+    }
+
+    if(query.exec()) {
+        model->setQuery(query);
+        ui->tableView->setModel(model);
     }
 }
 
-void MainWindow::on_lineEditBuscar_textChanged(const QString &texto)
+void MainWindow::on_lineEditBuscar_textChanged(const QString &arg1)
 {
-    proxyModel->setFilterRegularExpression(texto);
+    Q_UNUSED(arg1);
+    aplicarFiltros();
 }
 
-// ---------------------- CRUD Y DIÁLOGOS ----------------------
-void MainWindow::handleComponentDialog(int sourceRow)
+void MainWindow::on_Filtrar_currentTextChanged(const QString &arg1)
 {
-    ComponentDialog *dialog;
-    bool isEditing = (sourceRow != -1);
+    Q_UNUSED(arg1);
+    aplicarFiltros();
+}
 
-    if (isEditing) {
-        QString nombre = componentModel->data(componentModel->index(sourceRow, 1)).toString();
-        QString tipo = componentModel->data(componentModel->index(sourceRow, 2)).toString();
-        int cantidad = componentModel->data(componentModel->index(sourceRow, 3)).toInt();
-        QString ubicacion = componentModel->data(componentModel->index(sourceRow, 4)).toString();
-        QDate fecha = componentModel->data(componentModel->index(sourceRow, 5)).toDate();
+// ==========================================
+//            BOTÓN AÑADIR
+// ==========================================
+void MainWindow::on_btnAnadir_clicked()
+{
+    ComponentDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        QSqlQuery query;
+        query.prepare("INSERT INTO components (name, type, quantity, location, acquisition_date) VALUES (:name, :type, :quantity, :location, :date)");
 
-        dialog = new ComponentDialog(this, nombre, tipo, cantidad, ubicacion, fecha);
-    } else {
-        dialog = new ComponentDialog(this);
-    }
+        query.bindValue(":name", dialog.getNombre());
+        query.bindValue(":type", dialog.getTipo());
+        query.bindValue(":quantity", dialog.getCantidad());
+        query.bindValue(":location", dialog.getUbicacion());
+        query.bindValue(":date", dialog.getFechaAdquisicion());
 
-    if (dialog->exec() == QDialog::Accepted)
-    {
-        int targetRow = isEditing ? sourceRow : componentModel->rowCount();
-
-        if (!isEditing) {
-            componentModel->insertRow(targetRow);
-        }
-
-        componentModel->setData(componentModel->index(targetRow, 1), dialog->getNombre());
-        componentModel->setData(componentModel->index(targetRow, 2), dialog->getTipo());
-        componentModel->setData(componentModel->index(targetRow, 3), dialog->getCantidad());
-        componentModel->setData(componentModel->index(targetRow, 4), dialog->getUbicacion());
-        componentModel->setData(componentModel->index(targetRow, 5), dialog->getFechaAdquisicion());
-
-        if (componentModel->submitAll()) {
-            QMessageBox::information(this, "Éxito", isEditing ? "Actualizado correctamente." : "Añadido correctamente.");
+        if(query.exec()) {
+            QMessageBox::information(this, "Listo", "Componente añadido.");
+            refreshTable();
         } else {
-            QMessageBox::warning(this, "Error", "Error al guardar: " + componentModel->lastError().text());
-            componentModel->revertAll();
+            QMessageBox::critical(this, "Error", query.lastError().text());
         }
     }
-    componentModel->select();
-    delete dialog;
 }
 
-void MainWindow::on_btnAnadir_clicked() { handleComponentDialog(); }
-
+// ==========================================
+//            BOTÓN EDITAR
+// ==========================================
 void MainWindow::on_btnEditar_clicked()
 {
-    QModelIndex proxyIndex = ui->tableView->currentIndex();
-    if (!proxyIndex.isValid()) {
-        QMessageBox::warning(this, "Aviso", "Selecciona un ítem.");
+    QModelIndex index = ui->tableView->currentIndex();
+    if (!index.isValid()) {
+        QMessageBox::warning(this, "Aviso", "Selecciona una fila para editar.");
         return;
     }
-    int sourceRow = proxyModel->mapToSource(proxyIndex).row();
-    handleComponentDialog(sourceRow);
-}
 
-void MainWindow::on_btnEliminar_clicked() {
-    QModelIndex proxyIndex = ui->tableView->currentIndex();
-    if (!proxyIndex.isValid()) return;
+    int row = index.row();
+    QAbstractItemModel *m = ui->tableView->model();
 
-    if (QMessageBox::question(this, "Confirmar", "¿Eliminar?") == QMessageBox::Yes) {
-        QModelIndex sourceIndex = proxyModel->mapToSource(proxyIndex);
-        if (componentModel->removeRow(sourceIndex.row())) {
-            componentModel->submitAll();
+    int id = m->index(row, 0).data().toInt();
+    QString nombre = m->index(row, 1).data().toString();
+    QString tipo = m->index(row, 2).data().toString();
+    int cantidad = m->index(row, 3).data().toInt();
+    QString ubicacion = m->index(row, 4).data().toString();
+    QDate fecha = m->index(row, 5).data().toDate();
+
+    ComponentDialog dialog(this, nombre, tipo, cantidad, ubicacion, fecha);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        QSqlQuery query;
+        query.prepare("UPDATE components SET name=:n, type=:t, quantity=:q, location=:l, acquisition_date=:d WHERE id=:id");
+
+        query.bindValue(":n", dialog.getNombre());
+        query.bindValue(":t", dialog.getTipo());
+        query.bindValue(":q", dialog.getCantidad());
+        query.bindValue(":l", dialog.getUbicacion());
+        query.bindValue(":d", dialog.getFechaAdquisicion());
+        query.bindValue(":id", id);
+
+        if(query.exec()) {
+            refreshTable();
+            QMessageBox::information(this, "Listo", "Editado correctamente.");
+        } else {
+            QMessageBox::critical(this, "Error", query.lastError().text());
         }
     }
-    componentModel->select();
 }
 
-void MainWindow::on_tableView_doubleClicked(const QModelIndex &index)
+// ==========================================
+//            BOTÓN ELIMINAR
+// ==========================================
+void MainWindow::on_btnEliminar_clicked()
 {
-    Q_UNUSED(index);
-    on_btnEditar_clicked();
+    QModelIndex index = ui->tableView->currentIndex();
+    if (!index.isValid()) {
+        QMessageBox::warning(this, "Aviso", "Selecciona una fila para eliminar.");
+        return;
+    }
+
+    if (QMessageBox::question(this, "Confirmar", "¿Borrar este elemento?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes) {
+        int id = ui->tableView->model()->index(index.row(), 0).data().toInt();
+
+        QSqlQuery query;
+        query.prepare("DELETE FROM components WHERE id = :id");
+        query.bindValue(":id", id);
+
+        if(query.exec()) {
+            refreshTable();
+        } else {
+            QMessageBox::critical(this, "Error", query.lastError().text());
+        }
+    }
 }
 
-// ---------------------- REPORTES (CORREGIDO: SIN PUNTO Y COMA) ----------------------
+// ==========================================
+//      BOTÓN REPORTE (CON SELECTOR DE ARCHIVO)
+// ==========================================
 void MainWindow::on_btnReporte_clicked()
 {
-    DatabaseManager dbManager("inventario.sqlite");
-    QVector<QStringList> componentes = dbManager.getAllComponentsForReport();
+    // CORRECCIÓN: Nombre de función coincide con btnReporte del .ui
 
-    if (componentes.isEmpty()) {
-        QMessageBox::information(this, "Reporte", "No hay datos.");
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    "Guardar Reporte",
+                                                    QDir::homePath() + "/reporte.pdf",
+                                                    "Archivos PDF (*.pdf)");
+
+    if (fileName.isEmpty()) {
+        return; // Usuario canceló
+    }
+
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setPageSize(QPageSize(QPageSize::A4));
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(fileName);
+
+    QPainter painter;
+    if (!painter.begin(&printer)) {
+        QMessageBox::warning(this, "Error", "No se pudo iniciar el PDF.");
         return;
     }
 
-    QStringList headers = {"ID", "Nombre", "Tipo", "Cantidad", "Ubicación", "Fecha"};
-    QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    painter.setFont(QFont("Arial", 18, QFont::Bold));
+    painter.drawText(50, 100, "REPORTE DE INVENTARIO");
 
-    // CSV
-    QString csvPath = QFileDialog::getSaveFileName(this, "Guardar CSV", defaultPath + "/reporte.csv", "CSV (*.csv)");
-    if (!csvPath.isEmpty()) {
-        QFile csvFile(csvPath);
-        if (csvFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            QTextStream out(&csvFile);
-            out.setCodec("UTF-8");
-            out << headers.join(",") << "\n";
-            for (const QStringList &row : componentes) out << row.join(",") << "\n";
-            csvFile.close();
-            QMessageBox::information(this, "Reporte", "CSV Generado.");
+    painter.setFont(QFont("Arial", 10));
+    painter.drawText(50, 130, "Fecha: " + QDate::currentDate().toString("dd/MM/yyyy"));
+
+    int y = 180;
+
+    QSqlQuery query("SELECT name, quantity, type, location FROM components");
+
+    while(query.next()) {
+        QString texto = QString("- %1: %2 un. (%3) en %4")
+                        .arg(query.value(0).toString())
+                        .arg(query.value(1).toString())
+                        .arg(query.value(2).toString())
+                        .arg(query.value(3).toString());
+
+        painter.drawText(50, y, texto);
+        y += 25;
+
+        if (y > 1000) {
+            printer.newPage();
+            y = 50;
         }
     }
 
-    // PDF
-    QString pdfPath = QFileDialog::getSaveFileName(this, "Guardar PDF", defaultPath + "/reporte.pdf", "PDF (*.pdf)");
-    if (!pdfPath.isEmpty()) {
-        QPdfWriter pdfWriter(pdfPath);
-        pdfWriter.setPageSize(QPageSize(QPageSize::A4));
-        pdfWriter.setPageMargins(QMarginsF(20, 20, 20, 20), QPageLayout::Millimeter);
-
-        QPainter painter(&pdfWriter);
-        QFont font = painter.font();
-        int y = 50; int startX = 20;
-
-        font.setPixelSize(20); font.setBold(true); painter.setFont(font);
-        painter.drawText(startX, y, "Reporte de Inventario"); y += 50;
-
-        font.setPixelSize(12); painter.setFont(font);
-        QVector<int> colWidths = {30, 150, 100, 50, 100, 100};
-        int currentX = startX;
-
-        for (int i = 0; i < headers.size(); ++i) {
-            painter.drawText(currentX, y, headers[i]);
-            currentX += colWidths[i];
-        }
-        y += 10; painter.drawLine(startX, y, currentX, y); y += 20;
-
-        font.setBold(false); painter.setFont(font);
-        for (const QStringList &row : componentes) {
-            if (y > pdfWriter.height() - 50) { pdfWriter.newPage(); y = 50; }
-            currentX = startX;
-            for (int i = 0; i < row.size(); ++i) {
-                painter.drawText(currentX, y, row[i]);
-                currentX += colWidths[i];
-            }
-            y += 25;
-        }
-        painter.end();
-        QMessageBox::information(this, "Reporte", "PDF Generado.");
-    }
+    painter.end();
+    QMessageBox::information(this, "PDF Guardado", "Archivo creado en:\n" + fileName);
 }
