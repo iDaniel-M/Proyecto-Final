@@ -1,35 +1,34 @@
 #ifndef DATABASEMANAGER_H
 #define DATABASEMANAGER_H
 
-#include "component.h"
+#include <QString>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
-#include <QDebug>
 #include <QList>
-#include <QVector> // Necesario para QVector<QStringList>
-#include <QStringList> // Necesario para QVector<QStringList>
+#include <QDebug>
+#include "component.h" // Incluimos la clase que acabamos de arreglar
 
 class DatabaseManager
 {
 public:
-    DatabaseManager(const QString &databaseName = "inventario.sqlite");
+    // --- ESTA ES LA LÍNEA QUE TE FALTABA PARA QUE FUNCIONE MAINWINDOW ---
+    static DatabaseManager& instance();
 
-    bool openDatabase();
+    // Métodos públicos
+    bool openConnection();
     bool createTable();
-
-    // Operación CREATE
-    bool addComponent(const Component &component);
-
-    // Operación READ (Lectura para la interfaz, si la usaras)
-    QList<Component> allComponents() const;
-
-    // Operación READ para Reporte (¡NUEVO!)
-    QVector<QStringList> getAllComponentsForReport() const;
+    QList<Component> getAllComponents(); // Declaración del método
 
 private:
+    // Constructor privado (Singleton)
+    DatabaseManager();
+
+    // Prohibir copias
+    DatabaseManager(const DatabaseManager&) = delete;
+    DatabaseManager& operator=(const DatabaseManager&) = delete;
+
     QSqlDatabase m_db;
-    const QString DB_NAME;
 };
 
 #endif // DATABASEMANAGER_H
